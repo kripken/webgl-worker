@@ -12,6 +12,17 @@
 
     <!-- The script -->
     <script>
+
+
+    /*
+    // Hack to render just one frame, for debugging
+    var trueRAF = window.requestAnimationFrame;
+    var timesLeft = 1;
+    window.requestAnimationFrame = function(func) {
+      if (timesLeft-- > 0) trueRAF(func);
+    };
+    */
+
     // ***********    Initialize application   *******************
     var canvas = document.getElementById("application-canvas");
 

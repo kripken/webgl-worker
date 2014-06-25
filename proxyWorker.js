@@ -71,9 +71,9 @@ window.scrollX = window.scrollY = 0; // TODO: proxy these
 
 window.WebGLRenderingContext = WebGLWorker;
 
+var timesLeft = Infinity; // set to 1 to render just 1 frame, for debugging
 window.requestAnimationFrame = function(func) {
-  // TODO: use proper timing, see Browser.requestAnimationFrame XXX
-  setTimeout(func, 1000/60);
+  if (timesLeft-- > 0) setTimeout(func, 1000/60);
 };
 
 var webGLWorker = new WebGLWorker();
