@@ -613,6 +613,7 @@ function WebGLWorker() {
         case 'mat3': return that.FLOAT_MAT3;
         case 'mat4': return that.FLOAT_MAT4;
         case 'sampler2D': return that.SAMPLER_2D;
+        case 'samplerCube': return that.SAMPLER_CUBE;
         default: throw 'not yet recognized type text: ' + text;
       }
     }
@@ -752,13 +753,17 @@ function WebGLWorker() {
       }
     }
   };
+  function duplicate(something) {
+    // clone data properly: handles numbers, null, typed arrays, js arrays and array buffers
+    if (!something || typeof something === 'number') return something;
+    if (something.slice) return something.slice(0); // ArrayBuffer or js array
+    return new something.constructor(something); // typed array
+  }
   this.bufferData = function(target, something, usage) {
-    if (typeof something !== 'number') something = new something.constructor(something);
-    commandBuffer.push(27, target, something, usage);
+    commandBuffer.push(27, target, duplicate(something), usage);
   };
   this.bufferSubData = function(target, offset, something) {
-    if (typeof something !== 'number') something = new something.constructor(something);
-    commandBuffer.push(28, target, offset, something);
+    commandBuffer.push(28, target, offset, duplicate(something));
   };
   this.viewport = function(x, y, w, h) {
     commandBuffer.push(29, x, y, w, h);
@@ -811,10 +816,10 @@ function WebGLWorker() {
   };
   this.texImage2D = function(target, level, internalformat, width, height, border, format, type, pixels) {
     assert(pixels || pixels === null); // we do not support the overloads that have fewer params
-    commandBuffer.push(40, target, level, internalformat, width, height, border, format, type, pixels ? new pixels.constructor(pixels) : pixels);
+    commandBuffer.push(40, target, level, internalformat, width, height, border, format, type, duplicate(pixels));
   };
   this.compressedTexImage2D = function(target, level, internalformat, width, height, border, pixels) {
-    commandBuffer.push(41, target, level, internalformat, width, height, border, new pixels.constructor(pixels));
+    commandBuffer.push(41, target, level, internalformat, width, height, border, duplicate(pixels));
   };
   this.activeTexture = function(texture) {
     commandBuffer.push(42, texture);
@@ -906,7 +911,6 @@ function WebGLWorker() {
     commandBuffer.push(64, text);
   };
   this.hint = function(target, mode) {
-dump('hint ' + [target, mode, revname(target), revname(mode)] + '\n');
     commandBuffer.push(65, target, mode);
   };
   this.blendEquation = function(mode) {
@@ -933,6 +937,7 @@ dump('hint ' + [target, mode, revname(target), revname(mode)] + '\n');
     }
     //throttledTracker.tick();
   }
+
   function postRAF() {
     if (commandBuffer.length > 0) {
       postMessage({ target: 'gl', op: 'render', commandBuffer: commandBuffer });
@@ -940,10 +945,16 @@ dump('hint ' + [target, mode, revname(target), revname(mode)] + '\n');
     }
   }
 
+  assert(!Browser.doSwapBuffers);
+  Browser.doSwapBuffers = postRAF;
+
   var trueRAF = window.requestAnimationFrame;
   window.requestAnimationFrame = function(func) {
     trueRAF(function() {
-      if (preRAF() === false) return;
+      if (preRAF() === false) {
+        window.requestAnimationFrame(func); // skip this frame, do it later
+        return;
+      }
       func();
       postRAF();
     });
