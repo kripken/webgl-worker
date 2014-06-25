@@ -95,7 +95,95 @@ worker.onmessage = function worker_onmessage(event) {
         case 'getContext': {
           Module.ctx = Module.canvas.getContext(data.type, data.attributes);
           if (data.type !== '2d') {
-            // possible GL_DEBUG entry point: Module.ctx = wrapDebugGL(Module.ctx);
+
+        function wrapDebugGL(ctx) {
+
+          var printObjectList = [];
+
+          function prettyPrint(arg) {
+            if (typeof arg == 'undefined') return '!UNDEFINED!';
+            if (typeof arg == 'boolean') arg = arg + 0;
+            if (!arg) return arg;
+            var index = printObjectList.indexOf(arg);
+            if (index >= 0) return '<' + arg + '|';// + index + '>';
+            if (arg.toString() == '[object HTMLImageElement]') {
+              return arg + '\n\n';
+            }
+            if (typeof arg === 'string') {
+              return arg;
+            }
+            if (arg.slice || arg.subarray) {
+              return '{' + Array.prototype.slice.call(new Int32Array(arg), 0, Math.min(arg.length, 400)) + '}'; // Useful for correct arrays, less so for compiled arrays, see the code below for that
+              var buf = new ArrayBuffer(32);
+              var i8buf = new Int8Array(buf);
+              var i16buf = new Int16Array(buf);
+              var f32buf = new Float32Array(buf);
+              switch(arg.toString()) {
+                case '[object Uint8Array]':
+                  i8buf.set(arg.subarray(0, 32));
+                  break;
+                case '[object Float32Array]':
+                  f32buf.set(arg.subarray(0, 5));
+                  break;
+                case '[object Uint16Array]':
+                  i16buf.set(arg.subarray(0, 16));
+                  break;
+                default:
+                  alert('unknown array for debugging: ' + arg);
+                  throw 'see alert';
+              }
+              var ret = '{' + arg.byteLength + ':\n';
+              var arr = Array.prototype.slice.call(i8buf);
+              ret += 'i8:' + arr.toString().replace(/,/g, ',') + '\n';
+              arr = Array.prototype.slice.call(f32buf, 0, 8);
+              ret += 'f32:' + arr.toString().replace(/,/g, ',') + '}';
+              return ret;
+            }
+            if (typeof arg == 'object') {
+              printObjectList.push(arg);
+              return '<' + arg + '|';// + (printObjectList.length-1) + ':' + arg.byteLength + ':' + arg.length + '>';
+            }
+            if (typeof arg == 'number') {
+              if (arg > 0) return '0x' + arg.toString(16) + ' (' + arg + ')';
+            }
+            return arg;
+          }
+
+          var wrapper = {};
+          for (var prop in ctx) {
+            (function(prop) {
+              switch (typeof ctx[prop]) {
+                case 'function': {
+                  wrapper[prop] = function gl_wrapper() {
+                    var printArgs = Array.prototype.slice.call(arguments).map(prettyPrint);
+                    dump('[gl_f:' + prop + ':' + printArgs + ']\n');
+                    var ret = ctx[prop].apply(ctx, arguments);
+                    if (typeof ret != 'undefined') {
+                      dump('[     gl:' + prop + ':return:' + prettyPrint(ret) + ']\n');
+                    }
+                    return ret;
+                  }
+                  break;
+                }
+                case 'number': case 'string': {
+                  wrapper.__defineGetter__(prop, function() {
+                    //dump('[gl_g:' + prop + ':' + ctx[prop] + ']\n');
+                    return ctx[prop];
+                  });
+                  wrapper.__defineSetter__(prop, function(value) {
+                    dump('[gl_s:' + prop + ':' + value + ']\n');
+                    ctx[prop] = value;
+                  });
+                  break;
+                }
+              }
+            })(prop);
+          }
+          return wrapper;
+        }
+
+
+            Module.ctx = wrapDebugGL(Module.ctx);
             Module.glClient = new WebGLClient();
           }
           break;
