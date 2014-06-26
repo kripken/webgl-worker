@@ -1,14 +1,3 @@
-
-// COPY BACK, CHAK DIFF
-
-function Element() { throw 'Element' }
-function Image() { throw 'Element' }
-function HTMLCanvasElement() { throw 'HTMLCanvasElement' }
-function HTMLImageElement() { throw 'HTMLImageElement' }
-function HTMLVideoElement() { throw 'HTMLVideoElement' }
-
-//... XXX
-
 function FPSTracker(text) {
   var last = 0;
   var mean = 0;
@@ -26,6 +15,12 @@ function FPSTracker(text) {
     last = now;
   }
 }
+
+function Element() { throw 'TODO: Element' }
+function Image() { throw 'TODO: Image' }
+function HTMLCanvasElement() { throw 'TODO: HTMLCanvasElement' }
+function HTMLImageElement() { throw 'TODO: HTMLImageElement' }
+function HTMLVideoElement() { throw 'TODO: HTMLVideoElement' }
 
 function PropertyBag() {
   this.addProperty = function(){};
@@ -71,10 +66,26 @@ window.scrollX = window.scrollY = 0; // TODO: proxy these
 
 window.WebGLRenderingContext = WebGLWorker;
 
-var timesLeft = 1;
-window.requestAnimationFrame = function(func) {
-  if (timesLeft-- > 0) setTimeout(func, 1000/60);
-};
+
+var timesLeft = 1; // set to 1 to render just 1 frame, for debugging
+window.requestAnimationFrame = (function() {
+  // similar to Browser.requestAnimationFrame
+  var nextRAF = 0;
+  return function(func) {
+    if (timesLeft-- === 0) return;
+    // try to keep 60fps between calls to here
+    var now = Date.now();
+    if (nextRAF === 0) {
+      nextRAF = now + 1000/60;
+    } else {
+      while (now + 2 >= nextRAF) { // fudge a little, to avoid timer jitter causing us to do lots of delay:0
+        nextRAF += 1000/60;
+      }
+    }
+    var delay = Math.max(nextRAF - now, 0);
+    setTimeout(func, delay);
+  };
+})();
 
 var webGLWorker = new WebGLWorker();
 
@@ -137,6 +148,32 @@ document.createElement = function document_createElement(what) {
       };
       canvas.style = new PropertyBag();
       canvas.exitPointerLock = function(){};
+
+      canvas.width_ = canvas.width;
+      canvas.height_ = canvas.height;
+      Object.defineProperty(canvas, 'width', {
+        set: function(value) {
+          canvas.width_ = value;
+          if (canvas === Module['canvas']) {
+            postMessage({ target: 'canvas', op: 'resize', width: canvas.width_, height: canvas.height_ });
+          }
+        },
+        get: function() {
+          return canvas.width_;
+        }
+      });
+      Object.defineProperty(canvas, 'height', {
+        set: function(value) {
+          canvas.height_ = value;
+          if (canvas === Module['canvas']) {
+            postMessage({ target: 'canvas', op: 'resize', width: canvas.width_, height: canvas.height_ });
+          }
+        },
+        get: function() {
+          return canvas.height_;
+        }
+      });
+
       return canvas;
     }
     default: throw 'document.createElement ' + what;
@@ -144,10 +181,11 @@ document.createElement = function document_createElement(what) {
 };
 
 document.getElementById = function(id) {
-  if (id === 'application-canvas') {
+  if (id === 'canvas' || id === 'application-canvas') {
     if (Module.canvas) return Module.canvas;
     return Module.canvas = document.createElement('canvas');
   }
+  throw 'document.getElementById failed on ' + id;
 };
 
 document.documentElement = {};
@@ -171,18 +209,22 @@ Audio.prototype.cloneNode = function() {
 }
 
 if (typeof console === 'undefined') {
+  // we can't call Module.printErr because that might be circular
   var console = {
-    info: function(x) {
-      //Module.printErr(x);
+    log: function(x) {
+      if (typeof dump === 'function') dump('log: ' + x + '\n');
     },
     debug: function(x) {
-      //Module.printErr(x);
+      if (typeof dump === 'function') dump('debug: ' + x + '\n');
     },
-    log: function(x) {
-      //Module.printErr(x);
+    info: function(x) {
+      if (typeof dump === 'function') dump('info: ' + x + '\n');
+    },
+    warn: function(x) {
+      if (typeof dump === 'function') dump('warn: ' + x + '\n');
     },
     error: function(x) {
-      //Module.printErr(x);
+      if (typeof dump === 'function') dump('error: ' + x + '\n');
     },
   };
 }
@@ -199,12 +241,6 @@ Module.printErr = function Module_printErr(x) {
   //dump('ERR: ' + x + '\n');
   postMessage({ target: 'stderr', content: x });
 };
-
-// Browser hooks
-
-Browser.resizeListeners.push(function(width, height) {
-  postMessage({ target: 'canvas', op: 'resize', width: width, height: height });
-});
 
 // Frame throttling
 
