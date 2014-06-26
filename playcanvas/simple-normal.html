@@ -1,13 +1,16 @@
+<!doctype html>
+<html>
+<head>
+    <script src="playcanvas-latest.js"></script>
+    <link href="style.css" rel="stylesheet" />
+</head>
 
-importScripts('../emshim.js');
-importScripts('../webGLWorker.js');
-importScripts('../proxyWorker.js');
+<body>
+    <!-- The canvas element -->
+    <canvas id="application-canvas" height="720" width="1200"></canvas>
 
-importScripts('playcanvas-latest.js');
-importScripts('ammo.js');
-
-setTimeout(function() { // wait for first message XXX
-
+    <!-- The script -->
+    <script>
         var canvas = document.getElementById("application-canvas");
 
         // Create the graphics device
@@ -77,6 +80,6 @@ setTimeout(function() { // wait for first message XXX
 
         // start running
         tick();
-
-}, 1000);
-
+    </script>
+</body>
+</html>
