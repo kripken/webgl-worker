@@ -1,3 +1,36 @@
+
+if (typeof console === 'undefined') {
+  // we can't call Module.printErr because that might be circular
+  var console = {
+    log: function(x) {
+      if (typeof dump === 'function') dump('log: ' + x + '\n');
+    },
+    debug: function(x) {
+      if (typeof dump === 'function') dump('debug: ' + x + '\n');
+    },
+    info: function(x) {
+      if (typeof dump === 'function') dump('info: ' + x + '\n');
+    },
+    warn: function(x) {
+      if (typeof dump === 'function') dump('warn: ' + x + '\n');
+    },
+    error: function(x) {
+      if (typeof dump === 'function') dump('error: ' + x + '\n');
+    },
+  };
+}
+
+function proxify(object, nick) {
+  return object;
+  return new Proxy(object, {
+    get: function(target, name) {
+      var ret = target[name];
+      if (ret === undefined) console.log('PROXY ' + [nick, target, name, ret, typeof ret]);
+      return ret;
+    }
+  });
+}
+
 function FPSTracker(text) {
   var last = 0;
   var mean = 0;
@@ -81,7 +114,7 @@ Image.prototype.onerror = function(){};
 
 var HTMLImageElement = Image;
 
-var window = this;
+var window = proxify(this, 'window');
 var windowExtra = new EventListener();
 for (var x in windowExtra) window[x] = windowExtra[x];
 
@@ -98,12 +131,13 @@ window.scrollX = window.scrollY = 0; // TODO: proxy these
 
 window.WebGLRenderingContext = WebGLWorker;
 
-//var timesLeft = 1; // set to 1 to render just 1 frame, for debugging
+var timesLeft = Infinity; // set to 1 to render just 1 frame, for debugging
 window.requestAnimationFrame = (function() {
   // similar to Browser.requestAnimationFrame
   var nextRAF = 0;
   return function(func) {
-//    if (timesLeft-- === 0) return;
+Module.printErr('worker frames left ' + timesLeft);
+    if (timesLeft-- === 0) return;
     // try to keep 60fps between calls to here
     var now = Date.now();
     if (nextRAF === 0) {
@@ -120,12 +154,12 @@ window.requestAnimationFrame = (function() {
 
 var webGLWorker = new WebGLWorker();
 
-var document = new EventListener();
+var document = proxify(new EventListener(), 'document');
 
 document.createElement = function document_createElement(what) {
   switch(what) {
     case 'canvas': {
-      var canvas = new EventListener();
+      var canvas = proxify(new EventListener(), 'canvas');
       canvas.ensureData = function canvas_ensureData() {
         if (!canvas.data || canvas.data.width !== canvas.width || canvas.data.height !== canvas.height) {
           canvas.data = {
@@ -192,8 +226,8 @@ document.createElement = function document_createElement(what) {
       canvas.style = new PropertyBag();
       canvas.exitPointerLock = function(){};
 
-      canvas.width_ = canvas.width;
-      canvas.height_ = canvas.height;
+      canvas.width_ = 400;
+      canvas.height_ = 400;
       Object.defineProperty(canvas, 'width', {
         set: function(value) {
           canvas.width_ = value;
@@ -256,27 +290,6 @@ Audio.prototype.pause = function(){};
 
 Audio.prototype.cloneNode = function() {
   return new Audio;
-}
-
-if (typeof console === 'undefined') {
-  // we can't call Module.printErr because that might be circular
-  var console = {
-    log: function(x) {
-      if (typeof dump === 'function') dump('log: ' + x + '\n');
-    },
-    debug: function(x) {
-      if (typeof dump === 'function') dump('debug: ' + x + '\n');
-    },
-    info: function(x) {
-      if (typeof dump === 'function') dump('info: ' + x + '\n');
-    },
-    warn: function(x) {
-      if (typeof dump === 'function') dump('warn: ' + x + '\n');
-    },
-    error: function(x) {
-      if (typeof dump === 'function') dump('error: ' + x + '\n');
-    },
-  };
 }
 
 Module.canvas = document.createElement('canvas');
