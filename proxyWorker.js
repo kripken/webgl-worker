@@ -1,13 +1,36 @@
 
-// COPY BACK, CHAK DIFF
+if (typeof console === 'undefined') {
+  // we can't call Module.printErr because that might be circular
+  var console = {
+    log: function(x) {
+      if (typeof dump === 'function') dump('log: ' + x + '\n');
+    },
+    debug: function(x) {
+      if (typeof dump === 'function') dump('debug: ' + x + '\n');
+    },
+    info: function(x) {
+      if (typeof dump === 'function') dump('info: ' + x + '\n');
+    },
+    warn: function(x) {
+      if (typeof dump === 'function') dump('warn: ' + x + '\n');
+    },
+    error: function(x) {
+      if (typeof dump === 'function') dump('error: ' + x + '\n');
+    },
+  };
+}
 
-function Element() { throw 'Element' }
-function Image() { throw 'Element' }
-function HTMLCanvasElement() { throw 'HTMLCanvasElement' }
-function HTMLImageElement() { throw 'HTMLImageElement' }
-function HTMLVideoElement() { throw 'HTMLVideoElement' }
-
-//... XXX
+/*
+function proxify(object, nick) {
+  return new Proxy(object, {
+    get: function(target, name) {
+      var ret = target[name];
+      if (ret === undefined) console.log('PROXY ' + [nick, target, name, ret, typeof ret]);
+      return ret;
+    }
+  });
+}
+*/
 
 function FPSTracker(text) {
   var last = 0;
@@ -27,9 +50,22 @@ function FPSTracker(text) {
   }
 }
 
+function Element() { throw 'TODO: Element' }
+function HTMLCanvasElement() { throw 'TODO: HTMLCanvasElement' }
+function HTMLVideoElement() { throw 'TODO: HTMLVideoElement' }
+
 function PropertyBag() {
   this.addProperty = function(){};
   this.removeProperty = function(){};
+};
+
+var IndexedObjects = {
+  nextId: 1,
+  cache: {},
+  add: function(object) {
+    object.id = this.nextId++;
+    this.cache[object.id] = object;
+  }
 };
 
 function EventListener() {
@@ -57,7 +93,27 @@ function EventListener() {
       });
     }
   };
-};
+}
+
+function Image() {
+  IndexedObjects.add(this);
+  EventListener.call(this);
+  var src = '';
+  Object.defineProperty(this, 'src', {
+    set: function(value) {
+      src = value;
+      assert(this.id);
+      postMessage({ target: 'Image', method: 'src', src: src, id: this.id });
+    },
+    get: function() {
+      return src;
+    }
+  });
+}
+Image.prototype.onload = function(){};
+Image.prototype.onerror = function(){};
+
+var HTMLImageElement = Image;
 
 var window = this;
 var windowExtra = new EventListener();
@@ -67,14 +123,32 @@ window.close = function window_close() {
   postMessage({ target: 'window', method: 'close' });
 };
 
+window.alert = function(text) {
+  Module.printErr('alert forever: ' + text);
+  while (1){};
+};
+
 window.scrollX = window.scrollY = 0; // TODO: proxy these
 
 window.WebGLRenderingContext = WebGLWorker;
 
-var timesLeft = Infinity; // set to 1 to render just 1 frame, for debugging
-window.requestAnimationFrame = function(func) {
-  if (timesLeft-- > 0) setTimeout(func, 1000/60);
-};
+window.requestAnimationFrame = (function() {
+  // similar to Browser.requestAnimationFrame
+  var nextRAF = 0;
+  return function(func) {
+    // try to keep 60fps between calls to here
+    var now = Date.now();
+    if (nextRAF === 0) {
+      nextRAF = now + 1000/60;
+    } else {
+      while (now + 2 >= nextRAF) { // fudge a little, to avoid timer jitter causing us to do lots of delay:0
+        nextRAF += 1000/60;
+      }
+    }
+    var delay = Math.max(nextRAF - now, 0);
+    setTimeout(func, delay);
+  };
+})();
 
 var webGLWorker = new WebGLWorker();
 
@@ -118,6 +192,18 @@ document.createElement = function document_createElement(what) {
               if (canvas === Module['canvas']) {
                 postMessage({ target: 'canvas', op: 'render', image: canvas.data });
               }
+            },
+            drawImage: function(image, x, y, w, h, ox, oy, ow, oh) {
+              assert (!x && !y && !ox && !oy);
+              assert(w === ow && h === oh);
+              assert(canvas.width === w || w === undefined);
+              assert(canvas.height === h || h === undefined);
+              assert(image.width === canvas.width && image.height === canvas.height);
+              canvas.ensureData();
+              canvas.data.data.set(image.data.data); // TODO: can we avoid this copy?
+              if (canvas === Module['canvas']) {
+                postMessage({ target: 'canvas', op: 'render', image: canvas.data });
+              }
             }
           };
         } else {
@@ -137,6 +223,32 @@ document.createElement = function document_createElement(what) {
       };
       canvas.style = new PropertyBag();
       canvas.exitPointerLock = function(){};
+
+      canvas.width_ = 400; // TODO: get the screen canvas size before we start up, use that
+      canvas.height_ = 400;
+      Object.defineProperty(canvas, 'width', {
+        set: function(value) {
+          canvas.width_ = value;
+          if (canvas === Module['canvas']) {
+            postMessage({ target: 'canvas', op: 'resize', width: canvas.width_, height: canvas.height_ });
+          }
+        },
+        get: function() {
+          return canvas.width_;
+        }
+      });
+      Object.defineProperty(canvas, 'height', {
+        set: function(value) {
+          canvas.height_ = value;
+          if (canvas === Module['canvas']) {
+            postMessage({ target: 'canvas', op: 'resize', width: canvas.width_, height: canvas.height_ });
+          }
+        },
+        get: function() {
+          return canvas.height_;
+        }
+      });
+
       return canvas;
     }
     default: throw 'document.createElement ' + what;
@@ -144,10 +256,11 @@ document.createElement = function document_createElement(what) {
 };
 
 document.getElementById = function(id) {
-  if (id === 'application-canvas') {
+  if (id === 'canvas' || id === 'application-canvas') {
     if (Module.canvas) return Module.canvas;
     return Module.canvas = document.createElement('canvas');
   }
+  throw 'document.getElementById failed on ' + id;
 };
 
 document.documentElement = {};
@@ -162,29 +275,19 @@ document.styleSheets = [{
 function Audio() {
   Runtime.warnOnce('faking Audio elements, no actual sound will play');
 }
+Audio.prototype = new EventListener();
+Object.defineProperty(Audio.prototype, 'src', {
+  set: function(value) {
+    if (value[0] === 'd') return; // ignore data urls
+    this.onerror();
+  },
+});
 
 Audio.prototype.play = function(){};
 Audio.prototype.pause = function(){};
 
 Audio.prototype.cloneNode = function() {
   return new Audio;
-}
-
-if (typeof console === 'undefined') {
-  var console = {
-    info: function(x) {
-      //Module.printErr(x);
-    },
-    debug: function(x) {
-      //Module.printErr(x);
-    },
-    log: function(x) {
-      //Module.printErr(x);
-    },
-    error: function(x) {
-      //Module.printErr(x);
-    },
-  };
 }
 
 Module.canvas = document.createElement('canvas');
@@ -199,12 +302,6 @@ Module.printErr = function Module_printErr(x) {
   //dump('ERR: ' + x + '\n');
   postMessage({ target: 'stderr', content: x });
 };
-
-// Browser hooks
-
-Browser.resizeListeners.push(function(width, height) {
-  postMessage({ target: 'canvas', op: 'resize', width: width, height: height });
-});
 
 // Frame throttling
 
@@ -267,6 +364,24 @@ onmessage = function onmessage(message) {
     }
     case 'tock': {
       clientFrameId = message.data.id;
+      break;
+    }
+    case 'Image': {
+      var img = IndexedObjects.cache[message.data.id];
+      switch (message.data.method) {
+        case 'onload': {
+          img.width = message.data.width;
+          img.height = message.data.height;
+          img.data = { width: img.width, height: img.height, data: message.data.data };
+          img.complete = true;
+          img.onload();
+          break;
+        }
+        case 'onerror': {
+          img.onerror({ srcElement: img });
+          break;
+        }
+      }
       break;
     }
     default: throw 'wha? ' + message.data.target;
