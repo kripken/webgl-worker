@@ -4,7 +4,6 @@ importScripts('../webGLWorker.js');
 importScripts('../proxyWorker.js');
 
 importScripts('playcanvas-latest.js');
-importScripts('ammo.js');
 
 setMain(function() {
 
