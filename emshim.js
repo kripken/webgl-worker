@@ -10,3 +10,20 @@ function assert(x, y) {
   }
 }
 
+function setMain(func) {
+  Module.main = func;
+}
+
+var runDependencies = 0;
+
+function addRunDependency() {
+  runDependencies++;
+}
+
+function removeRunDependency(id) {
+  runDependencies--;
+  if (runDependencies == 0) {
+    Module.main();
+  }
+}
+

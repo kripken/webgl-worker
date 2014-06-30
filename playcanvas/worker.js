@@ -6,7 +6,7 @@ importScripts('../proxyWorker.js');
 importScripts('playcanvas-latest.js');
 importScripts('ammo.js');
 
-setTimeout(function() { // wait for first message XXX
+setMain(function() {
 
         var canvas = document.getElementById("application-canvas");
 
@@ -78,5 +78,5 @@ setTimeout(function() { // wait for first message XXX
         // start running
         tick();
 
-}, 1000);
+});
 
