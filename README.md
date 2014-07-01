@@ -13,6 +13,8 @@ Usage
 
 See the PlayCanvas demo for a simple example. Basically you include a few JS files in your HTML, and make sure your JS (which should be in a file called worker.js) loads the worker-corresponding files (proxyClient/proxyWorker, etc.). That's basically it.
 
+For Emscripten-compiled projects, like BananaBread, you just need to build with `--proxy-to-worker`.
+
 
 Limitations
 -----------
