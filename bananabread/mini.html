@@ -1294,6 +1294,55 @@
         BananaBread.execute('sensitivity 10');
         BananaBread.execute('clearconsole');
       };
+
+      // remove audio, for a better comparison to the worker version which is audio-less for now
+      function EventListener() {
+        this.listeners = {};
+
+        this.addEventListener = function addEventListener(event, func) {
+          if (!this.listeners[event]) this.listeners[event] = [];
+          this.listeners[event].push(func);
+        };
+
+        this.removeEventListener = function(event, func) {
+          var list = this.listeners[event];
+          if (!list) return;
+          var me = list.indexOf(func);
+          if (me < 0) return;
+          list.splice(me, 1);
+        };
+
+        this.fireEvent = function fireEvent(event) {
+          event.preventDefault = function(){};
+
+          if (event.type in this.listeners) {
+            this.listeners[event.type].forEach(function(listener) {
+              listener(event);
+            });
+          }
+        };
+      }
+
+      function Audio() {
+        Runtime.warnOnce('faking Audio elements, no actual sound will play');
+      }
+      Audio.prototype = new EventListener();
+      Object.defineProperty(Audio.prototype, 'src', {
+        set: function(value) {
+          if (value[0] === 'd') return; // ignore data urls
+          this.onerror();
+        },
+      });
+
+      Audio.prototype.play = function(){};
+      Audio.prototype.pause = function(){};
+
+      Audio.prototype.cloneNode = function() {
+        return new Audio;
+      }
+
+      console.log('no audio will play');
+
     </script>
 
     <script async src="js/api.js"></script>
