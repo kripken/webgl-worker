@@ -21,3 +21,5 @@ Limitations
 
 Enough of WebGL has been implemented here for those 2 demos, but much of the spec still isn't. Aside from synchronous features, nothing prevents the rest from being added.
 
+WebGL objects can be destroyed in 2 ways: explicitly, using deleteX (deleteBuffer, deleteShader, etc.), or implicitly, when the corresponding JavaScript object is garbage collected. In WebGLWorker, the corresponding JavaScript object is created on the main thread, and we have a map of them by a numeric ID, so we can identify them when a message arrives from the worker. That means that we will hold on to them unti we are explicitly told otherwise. In other words, you must use the deleteX methods to explicitly free WebGL objects, or else they will leak. (Note that this is not a problem for Emscripten-compiled projects, as in the C or C++ source code there would have to be calls to glDeleteX, which Emscripten maps to deleteX).
+
