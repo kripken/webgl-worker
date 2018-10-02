@@ -1,0 +1,11 @@
+body {
+    font-family: Helvetica, arial, sans-serif;
+    font-size: 12px;
+    margin: 0;
+    color: #cccfcf;
+    background-color: #324447;
+}
+canvas {
+    display: block;
+    margin: 0 auto;
+}
